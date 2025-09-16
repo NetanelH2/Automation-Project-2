@@ -1,5 +1,6 @@
 import type {StringOrRoleLocatorType} from '@/types'
-import {type Locator, type Page, expect} from '@playwright/test'
+import {type Expect, expect, type Locator, type Page} from '@playwright/test'
+import {error} from 'console'
 import {LocatorUtils} from './LocatorUtils'
 
 export class BasePage extends LocatorUtils {
@@ -11,21 +12,24 @@ export class BasePage extends LocatorUtils {
   protected async validateText(
     locator: StringOrRoleLocatorType,
     text: string,
-  ): Promise<void> {
+  ): Promise<Expect> | never {
     const extractedLocator = this.extractLocator(locator)
-    try {
-      await expect(extractedLocator).toHaveText(text)
-    } catch {
+    const locatorTypes: (() => Promise<void>)[] = [
+      (): Promise<void> => expect(extractedLocator).toHaveText(text),
+      (): Promise<void> => expect(extractedLocator).toContainText(text),
+    ]
+    for (const locatorType of locatorTypes) {
       try {
-        await expect(extractedLocator).toContainText(text)
-      } catch (error) {
-        throw new Error(
-          `Element with locator "${JSON.stringify(
-            locator,
-          )}" does not contain text "${text}". Error: ${error}`,
-        )
+        await locatorType()
+      } catch {
+        continue
       }
     }
+    throw new Error(
+      `Element with locator "${JSON.stringify(
+        locator,
+      )}" does not contain text "${text}". Error: ${error}`,
+    )
   }
   // Validate URL of the page
   protected async validateURL(expectedURL: string): Promise<void> {

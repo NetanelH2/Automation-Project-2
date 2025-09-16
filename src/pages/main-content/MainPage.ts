@@ -10,11 +10,9 @@ export class MainPage extends BasePage {
   }
   async openMainPage(): Promise<void> {
     await test.step('Open main page', async () => {
+      const {imageLink} = MAIN_PAGE_LOCATORS
       await this.page.goto(BASE_URL)
-      await this.validateText(
-        MAIN_PAGE_LOCATORS.importantFactsTitle,
-        'עובדות שחשוב שתדע',
-      )
+      await this.validateVisibility(imageLink)
     })
   }
 }

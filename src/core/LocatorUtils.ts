@@ -10,15 +10,16 @@ export class LocatorUtils {
 
   // Find a locator by string, using multiple strategies
   protected findLocatorByString(locator: string): Locator {
-    const strategies: (() => Locator)[] = [
+    const locators: (() => Locator)[] = [
       (): Locator => this.page.locator(locator),
       (): Locator => this.page.getByLabel(locator),
       (): Locator => this.page.getByText(locator),
+      (): Locator => this.page.getByAltText(locator),
     ]
-    // Iterate through strategies until one succeeds
-    for (const strategy of strategies) {
+    // Iterate through locators until one succeeds
+    for (const locator of locators) {
       try {
-        return strategy()
+        return locator()
       } catch {
         continue
       }

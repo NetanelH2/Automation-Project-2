@@ -1,6 +1,6 @@
 export const MAIN_PAGE_LOCATORS = {
-  importantFactsTitle: {
-    role: 'heading',
-    name: 'עובדות שחשוב שתדע',
+  imageLink: {
+    role: 'link',
+    name: 'Website for automation',
   },
 } as const
