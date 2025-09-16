@@ -1,0 +1,141 @@
+name: Cleanup Old Artifacts
+
+on:
+  # Run cleanup every 24 hours
+  schedule:
+    - cron: '0 2 * * *'
+
+  # Manual trigger for immediate cleanup
+  workflow_dispatch:
+    inputs:
+      days_to_keep:
+        description: 'Number of days to keep artifacts'
+        required: true
+        default: '3'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '7'
+      dry_run:
+        description: 'Dry run - only show what would be deleted'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+# Required permissions for artifact management
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: false # Workflow disabled - remove 'false &&' to enable
+    steps:
+      - name: Delete old artifacts
+        uses: actions/github-script@v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const daysToKeep = parseInt('${{ github.event.inputs.days_to_keep || '3' }}');
+            const dryRun = '${{ github.event.inputs.dry_run || 'false' }}' === 'true';
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+
+            console.log(`🧹 Cleaning up artifacts older than ${daysToKeep} days (before ${cutoffDate.toISOString()})`);
+            console.log(`🔍 Dry run: ${dryRun}`);
+
+            try {
+              // Get all artifacts
+              const artifacts = await github.rest.actions.listArtifactsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100
+              });
+
+              let deletedCount = 0;
+              let totalSize = 0;
+
+              for (const artifact of artifacts.data.artifacts) {
+                const artifactDate = new Date(artifact.created_at);
+                
+                if (artifactDate < cutoffDate) {
+                  totalSize += artifact.size_in_bytes;
+                  
+                  if (dryRun) {
+                    console.log(`🗑️  Would delete: ${artifact.name} (${(artifact.size_in_bytes / 1024 / 1024).toFixed(2)} MB) - ${artifact.created_at}`);
+                  } else {
+                    try {
+                      await github.rest.actions.deleteArtifact({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        artifact_id: artifact.id
+                      });
+                      console.log(`✅ Deleted: ${artifact.name} (${(artifact.size_in_bytes / 1024 / 1024).toFixed(2)} MB) - ${artifact.created_at}`);
+                    } catch (error) {
+                      console.log(`❌ Failed to delete ${artifact.name}: ${error.message}`);
+                    }
+                  }
+                  deletedCount++;
+                }
+              }
+
+              const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+
+              if (dryRun) {
+                console.log(`\n📊 Summary (DRY RUN):`);
+                console.log(`   - Would delete ${deletedCount} artifacts`);
+                console.log(`   - Would free up ${totalSizeMB} MB`);
+              } else {
+                console.log(`\n📊 Cleanup Summary:`);
+                console.log(`   - Deleted ${deletedCount} artifacts`);
+                console.log(`   - Freed up ${totalSizeMB} MB`);
+              }
+
+              // Add to step summary
+              const summaryLines = [
+                `🧹 Artifact Cleanup ${dryRun ? '(DRY RUN)' : 'Complete'}`,
+                '',
+                `📅 Cutoff Date: ${cutoffDate.toISOString()}`,
+                `🗑️ Artifacts ${dryRun ? 'would be' : ''} processed: ${deletedCount}`,
+                `💾 Storage ${dryRun ? 'would be' : ''} freed: ${totalSizeMB} MB`,
+                '',
+                `⏰ Completed at: ${new Date().toISOString()}`
+              ];
+
+              require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryLines.join('\n'));
+            } catch (error) {
+              console.error(`❌ Error during cleanup: ${error.message}`);
+              throw error;
+            }
+
+      - name: Log remaining artifacts
+        uses: actions/github-script@v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              const artifacts = await github.rest.actions.listArtifactsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100
+              });
+
+              console.log(`\n📦 Remaining artifacts: ${artifacts.data.artifacts.length}`);
+
+              let totalRemainingSize = 0;
+              for (const artifact of artifacts.data.artifacts) {
+                totalRemainingSize += artifact.size_in_bytes;
+                console.log(`   - ${artifact.name}: ${(artifact.size_in_bytes / 1024 / 1024).toFixed(2)} MB (${artifact.created_at})`);
+              }
+
+              const totalRemainingSizeMB = (totalRemainingSize / 1024 / 1024).toFixed(2);
+              console.log(`\n💾 Total remaining storage: ${totalRemainingSizeMB} MB`);
+            } catch (error) {
+              console.error(`❌ Error listing artifacts: ${error.message}`);
+            }

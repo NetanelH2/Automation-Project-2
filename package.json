@@ -1,0 +1,65 @@
+{
+  "name": "playwright-typescript-init",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:chrome": "playwright test --project=chromium",
+    "test:debug": "playwright test --project=chromium --debug",
+    "test:headed": "playwright test --project=chromium --headed",
+    "test:sanity": "TEST_TAGS='@sanity' playwright test",
+    "test:sanity:chrome": "TEST_TAGS='@sanity' playwright test --project=chromium",
+    "test:regression": "TEST_TAGS='@regression' playwright test",
+    "test:regression:chrome": "TEST_TAGS='@regression' playwright test --project=chromium",
+    "report": "playwright show-report",
+    "codegen": "playwright codegen",
+    "pre-commit": "lint-staged",
+    "prepare": "husky",
+    "lint:check": "eslint src/**/*.ts --max-warnings 0 --no-warn-ignored",
+    "format:check": "prettier --check src/**/*.ts",
+    "check": "npm run lint:check && npm run format:check && npx tsc --noEmit",
+    "fix": "prettier --write src/**/*.ts && eslint src/**/*.ts --fix --no-warn-ignored",
+    "trigger-ci": "git commit --allow-empty -m \"trigger CI workflows for testing\" && git push"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NetanelH2/Playwright-TypeScript-Init.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/NetanelH2/Playwright-TypeScript-Init/issues"
+  },
+  "homepage": "https://github.com/NetanelH2/Playwright-TypeScript-Init#readme",
+  "description": "",
+  "dependencies": {
+    "dotenv": "^17.2.1"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.3.0",
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^24.2.1",
+    "@typescript-eslint/eslint-plugin": "^8.20.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-playwright": "^2.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "husky": "^9.1.7",
+    "jiti": "^2.4.2",
+    "lint-staged": "^16.1.5",
+    "prettier": "^3.4.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  },
+  "lint-staged": {
+    "src/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}

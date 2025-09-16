@@ -1,0 +1,10 @@
+#!/bin/sh
+# Auto-fix formatting and linting
+echo "🔧 Auto-fixing code issues..."
+npm run fix
+
+# Run lint-staged for staged files
+echo "🔍 Running quality checks..."
+npm run pre-commit
+
+echo "✅ Pre-commit checks completed successfully!"

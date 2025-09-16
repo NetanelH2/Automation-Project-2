@@ -1,0 +1,124 @@
+name: Deploy Playwright HTML Report to GitHub Pages
+
+on:
+  workflow_run:
+    workflows: ['Sanity Tests', 'Regression Tests']
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+  actions: read
+  contents: read
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    if: false # Workflow disabled - remove 'false &&' to enable
+    steps:
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Create reports directory structure
+        run: mkdir -p reports latest
+
+      - name: Set workflow variables
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+            RUN_NUMBER="${{ github.event.workflow_run.run_number }}"
+          else
+            WORKFLOW_NAME=""
+            RUN_NUMBER="${{ github.run_number }}"
+          fi
+
+          case "$WORKFLOW_NAME" in
+            *"Sanity"*|*"sanity"*) ARTIFACT_NAME="sanity-playwright-report-$RUN_NUMBER" ;;
+            *"Regression"*|*"regression"*) ARTIFACT_NAME="regression-playwright-report-$RUN_NUMBER" ;;
+            *) ARTIFACT_NAME="playwright-report-$RUN_NUMBER" ;;
+          esac
+
+          echo "WORKFLOW_NAME=$WORKFLOW_NAME" >> $GITHUB_ENV
+          echo "RUN_NUMBER=$RUN_NUMBER" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
+          echo "WORKFLOW_DIR=$(echo "$WORKFLOW_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "MANUAL_DISPATCH=true" >> $GITHUB_ENV
+          fi
+
+      - name: Download artifacts
+        id: download
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          name: ${{ github.event_name == 'workflow_run' && (contains(github.event.workflow_run.name, 'Sanity') && format('sanity-playwright-report-{0}', github.event.workflow_run.run_number) || contains(github.event.workflow_run.name, 'Regression') && format('regression-playwright-report-{0}', github.event.workflow_run.run_number) || format('playwright-report-{0}', github.event.workflow_run.run_number)) || format('playwright-report-{0}', github.run_number) }}
+          path: ./reports-temp/
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ github.event.workflow_run.id || github.run_id }}
+          if_no_artifact_found: warn
+        continue-on-error: true
+
+      - name: Deploy Playwright report
+        run: |
+          if [ -d "./reports-temp" ] && [ "$(ls -A ./reports-temp)" ]; then
+            if [ -f "./reports-temp/index.html" ]; then
+              cp "./reports-temp/index.html" ./index.html
+              find "./reports-temp" -mindepth 1 -maxdepth 1 ! -name "trace" ! -name "index.html" -exec cp -r {} ./ \;
+
+              if [ -d "./reports-temp/trace" ]; then
+                rm -rf ./trace
+                cp -r "./reports-temp/trace" ./trace
+                cp "./reports-temp/index.html" ./index.html
+              fi
+
+              echo "REPORTS_AVAILABLE=true" >> $GITHUB_ENV
+            else
+              FIRST_ARTIFACT_DIR=$(find ./reports-temp -mindepth 1 -maxdepth 1 -type d | head -1)
+              if [ -n "$FIRST_ARTIFACT_DIR" ] && [ -f "$FIRST_ARTIFACT_DIR/index.html" ]; then
+                cp "$FIRST_ARTIFACT_DIR/index.html" ./index.html
+                find "$FIRST_ARTIFACT_DIR" -mindepth 1 -maxdepth 1 ! -name "index.html" -exec cp -r {} ./ \;
+                echo "REPORTS_AVAILABLE=true" >> $GITHUB_ENV
+              else
+                echo "REPORTS_AVAILABLE=false" >> $GITHUB_ENV
+              fi
+            fi
+          else
+            echo "REPORTS_AVAILABLE=false" >> $GITHUB_ENV
+          fi
+
+          if [ "$REPORTS_AVAILABLE" = "false" ]; then
+            echo "<html><body><h1>No Playwright Report Available</h1><p>Test artifacts may be missing due to storage quota limits or test failures. Storage quota refreshes every 6-12 hours.</p></body></html>" > ./index.html
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4.0.5
+
+      - name: Add deployment status to summary
+        run: |
+          echo "🎭 Playwright Report Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$REPORTS_AVAILABLE" = "true" ]; then
+            echo "✅ Report deployed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "📊 URL: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+            echo "🔍 Trace viewer: $([ -f ./trace/index.html ] && echo 'Available at /trace/' || echo 'Not available')" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No artifacts available (likely storage quota exceeded)" >> $GITHUB_STEP_SUMMARY
+            echo "📊 URL: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⏰ $(date '+%B %d, %Y at %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
